@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="es" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#faf8f5" />
+    <title>Prism Memories — Momentos con Amigos</title>
+    <script>
+      try {
+        if (localStorage.getItem('theme') === 'dark') {
+          document.documentElement.classList.add('dark');
+          document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#070d18');
+        }
+      } catch (_) {}
+    </script>
+  </head>
+  <body class="bg-[#faf8f5] dark:bg-[#070d18] text-[#0f172a] dark:text-[#f1f5f9] antialiased selection:bg-sky-500/20 selection:text-sky-900 min-h-screen overflow-x-hidden transition-colors duration-300" style="font-family: 'HelvetiHand', cursive, sans-serif;">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

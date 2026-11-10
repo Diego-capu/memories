@@ -1,0 +1,145 @@
+@font-face {
+  font-family: 'HelvetiHand';
+  src: url('/fonts/HelvetiHand.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-serif: "HelvetiHand", cursive, sans-serif;
+  --font-sans: "HelvetiHand", cursive, sans-serif;
+  --font-hand: "HelvetiHand", cursive, sans-serif;
+  --color-canvas: #faf8f5;
+  --color-canvas-subtle: #f4f8fb;
+  --color-ink: #0f172a;
+  --color-ink-muted: #475569;
+  --color-sky-primary: #0284c7;
+  --color-sky-deep: #0369a1;
+  --color-sky-soft: #e0f2fe;
+  --color-sand: #f0f7fc;
+}
+
+/* Global Typography: HelvetiHand across the ENTIRE website */
+html,
+body,
+button,
+input,
+select,
+textarea,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+span,
+a,
+li,
+div {
+  font-family: 'HelvetiHand', "Caveat", cursive, sans-serif;
+}
+
+body {
+  font-family: 'HelvetiHand', "Caveat", cursive, sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.font-hand,
+.font-sans,
+.font-serif {
+  font-family: 'HelvetiHand', "Caveat", cursive, sans-serif;
+}
+
+@layer utilities {
+  /* Frosted milk glass for soft light theme with subtle sky border */
+  .liquid-glass {
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(186, 230, 253, 0.6);
+    box-shadow: 
+      0 12px 30px -4px rgba(15, 23, 42, 0.05),
+      0 4px 12px -2px rgba(15, 23, 42, 0.03),
+      inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  }
+
+  .dark .liquid-glass {
+    background: rgba(11, 20, 36, 0.78);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    box-shadow: 
+      0 15px 35px -5px rgba(0, 0, 0, 0.45),
+      0 4px 12px -2px rgba(0, 0, 0, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .liquid-glass-subtle {
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(186, 230, 253, 0.4);
+  }
+
+  .dark .liquid-glass-subtle {
+    background: rgba(11, 20, 36, 0.55);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .liquid-pill {
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(186, 230, 253, 0.7);
+    box-shadow: 
+      0 10px 25px -4px rgba(15, 23, 42, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 1);
+  }
+
+  .dark .liquid-pill {
+    background: rgba(12, 22, 38, 0.88);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 
+      0 10px 25px -4px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* Light mode custom scrollbar in soft sky blue */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #faf8f5;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(2, 132, 199, 0.3);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(2, 132, 199, 0.55);
+}
+
+/* Dark mode custom scrollbar */
+.dark::-webkit-scrollbar-track,
+.dark ::-webkit-scrollbar-track {
+  background: #070d18;
+}
+.dark::-webkit-scrollbar-thumb,
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.25);
+}
+.dark::-webkit-scrollbar-thumb:hover,
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.45);
+}
