@@ -129,3 +129,88 @@ export async function uploadTrackToSupabase({
 
   return insertData as RemotePlaylistTrack;
 }
+
+export interface RemoteSquadVideo {
+  id: string;
+  title: string;
+  author: string;
+  video_url: string;
+  platform: 'youtube' | 'drive';
+  embed_url: string;
+  thumbnail_url?: string;
+  tag: string;
+  created_at: string;
+}
+
+/**
+ * Fetches community-shared video links from `squad_videos` in Supabase Postgres.
+ */
+export async function fetchRemoteVideos(): Promise<RemoteSquadVideo[]> {
+  if (!supabase) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('squad_videos')
+      .select('id, title, author, video_url, platform, embed_url, thumbnail_url, tag, created_at')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('Error fetching squad videos from Supabase:', error.message);
+      return [];
+    }
+
+    return (data as RemoteSquadVideo[]) ?? [];
+  } catch (err) {
+    console.warn('Network error fetching squad videos:', err);
+    return [];
+  }
+}
+
+/**
+ * Inserts a video record into `squad_videos` in Supabase Postgres.
+ */
+export async function addVideoToSupabase({
+  title,
+  author,
+  videoUrl,
+  platform,
+  embedUrl,
+  thumbnailUrl,
+  tag = 'Momentos',
+}: {
+  title: string;
+  author?: string;
+  videoUrl: string;
+  platform: 'youtube' | 'drive';
+  embedUrl: string;
+  thumbnailUrl?: string;
+  tag?: string;
+}): Promise<RemoteSquadVideo | null> {
+  if (!supabase) {
+    throw new Error(
+      'Supabase no está configurado. Por favor define VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY.'
+    );
+  }
+
+  const { data, error } = await supabase
+    .from('squad_videos')
+    .insert([
+      {
+        title: title.trim(),
+        author: author?.trim() || 'Squad',
+        video_url: videoUrl.trim(),
+        platform,
+        embed_url: embedUrl.trim(),
+        thumbnail_url: thumbnailUrl || null,
+        tag: tag.trim() || 'Momentos',
+      },
+    ])
+    .select('id, title, author, video_url, platform, embed_url, thumbnail_url, tag, created_at')
+    .single();
+
+  if (error) {
+    throw new Error(`Error guardando video en Supabase: ${error.message}`);
+  }
+
+  return data as RemoteSquadVideo;
+}

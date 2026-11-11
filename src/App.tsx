@@ -6,6 +6,7 @@ import { Chapters } from './components/Chapters';
 import { BentoGrid } from './components/BentoGrid';
 import { QuotesSection } from './components/QuotesSection';
 import { InteractiveGallery } from './components/InteractiveGallery';
+import { CinemaSection } from './components/CinemaSection';
 import { AvatarsSection } from './components/AvatarsSection';
 import { FooterCTA } from './components/FooterCTA';
 
@@ -23,6 +24,7 @@ export function App(): React.JSX.Element {
         <BentoGrid />
         <QuotesSection />
         <InteractiveGallery />
+        <CinemaSection />
         <AvatarsSection />
       </main>
 

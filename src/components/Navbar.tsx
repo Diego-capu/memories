@@ -23,6 +23,7 @@ export const Navbar: React.FC = () => {
     { label: 'Pilares', href: '#pilares' },
     { label: 'Frases', href: '#frases' },
     { label: 'Galería', href: '#galeria' },
+    { label: 'Cine', href: '#cine' },
     { label: 'Avatares', href: '#avatares' },
   ];
 
