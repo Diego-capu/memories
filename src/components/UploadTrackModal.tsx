@@ -9,6 +9,7 @@ import {
   AlertCircle,
   Loader2,
   Sparkles,
+  KeyRound,
 } from 'lucide-react';
 import {
   formatFilenameToTitle,
@@ -39,6 +40,13 @@ export const UploadTrackModal: React.FC<UploadTrackModalProps> = ({
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
+  const [pin, setPin] = useState(() => {
+    try {
+      return sessionStorage.getItem('squad_music_pin') || '';
+    } catch {
+      return '';
+    }
+  });
   const [selectedPattern, setSelectedPattern] = useState<DiscPattern>('horizon');
   const [selectedPaletteIdx, setSelectedPaletteIdx] = useState(0);
 
@@ -80,6 +88,21 @@ export const UploadTrackModal: React.FC<UploadTrackModalProps> = ({
     if (!file) {
       setErrorMsg('Por favor selecciona un archivo de audio (.mp3, .wav, .m4a).');
       return;
+    }
+
+    // Verify Squad PIN
+    const env = import.meta.env as Record<string, string | undefined>;
+    const expectedPin = (env.VITE_MUSIC_PIN || env.MUSIC_PIN || '2026').trim();
+
+    if (pin.trim() !== expectedPin) {
+      setErrorMsg('PIN incorrecto. Pide el código de acceso al Squad para subir temas.');
+      return;
+    }
+
+    try {
+      sessionStorage.setItem('squad_music_pin', pin.trim());
+    } catch {
+      // ignore
     }
 
     const cleanTitle = title.trim() || formatFilenameToTitle(file.name);
@@ -308,6 +331,30 @@ export const UploadTrackModal: React.FC<UploadTrackModalProps> = ({
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Squad Security PIN input */}
+              <div>
+                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  PIN de seguridad del Squad <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    value={pin}
+                    onChange={(e) => {
+                      setPin(e.target.value);
+                      setErrorMsg(null);
+                    }}
+                    placeholder="Introduce el PIN de acceso"
+                    required
+                    className="w-full pl-9 pr-3 py-2 rounded-xl text-sm bg-white dark:bg-white/[0.04] border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0284c7] dark:focus:ring-[#38bdf8] transition-all font-mono tracking-widest"
+                  />
+                  <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                  Solo amigos del Squad con el PIN pueden publicar temas en la lista.
+                </p>
               </div>
 
               {/* Feedback messages */}
