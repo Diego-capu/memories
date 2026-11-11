@@ -31,7 +31,7 @@ export function parseVideoUrl(rawUrl: string): ParsedVideoInfo | null {
     return {
       platform: 'youtube',
       cleanId: videoId,
-      embedUrl: `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`,
+      embedUrl: `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`,
       thumbnailUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
       directUrl: `https://www.youtube.com/watch?v=${videoId}`,
     };

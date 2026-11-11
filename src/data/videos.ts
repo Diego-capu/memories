@@ -58,7 +58,7 @@ export const DEFAULT_VIDEOS: SquadVideo[] = RAW_DEFAULT_VIDEOS.map((item) => {
     title: item.title,
     author: item.author,
     originalUrl: item.url,
-    embedUrl: parsed?.embedUrl ?? 'https://www.youtube-nocookie.com/embed/F_fP_n5Z3zU',
+    embedUrl: parsed?.embedUrl ?? 'https://www.youtube.com/embed/F_fP_n5Z3zU',
     platform: parsed?.platform ?? 'youtube',
     thumbnailUrl: parsed?.thumbnailUrl,
     tag: item.tag,

@@ -66,6 +66,11 @@ export const CinemaSection: React.FC = () => {
     return videos.find((v) => v.id === activeVideoId) ?? videos[0] ?? DEFAULT_VIDEOS[0];
   }, [videos, activeVideoId]);
 
+  const safeEmbedUrl = useMemo(() => {
+    if (!activeVideo?.embedUrl) return '';
+    return activeVideo.embedUrl.replace('youtube-nocookie.com', 'youtube.com');
+  }, [activeVideo]);
+
   const handleSelectVideo = (video: SquadVideo) => {
     setActiveVideoId(video.id);
     setIsPlayingMain(true);
@@ -118,9 +123,10 @@ export const CinemaSection: React.FC = () => {
             <div className="relative w-full aspect-video bg-black/80 flex items-center justify-center">
               {isPlayingMain ? (
                 <iframe
-                  src={activeVideo.embedUrl}
+                  src={safeEmbedUrl}
                   title={activeVideo.title}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  referrerPolicy="strict-origin-when-cross-origin"
                   allowFullScreen
                   className="w-full h-full border-0"
                 />
