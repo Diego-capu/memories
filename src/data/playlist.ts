@@ -1,5 +1,6 @@
 import musicFiles from 'virtual:music-playlist';
 import type { DiscPattern } from '../components/ui/disc-cascade-carousel';
+import type { RemotePlaylistTrack } from '../lib/supabase';
 
 export interface PlaylistTrack {
   id: string;
@@ -10,6 +11,7 @@ export interface PlaylistTrack {
   pattern: DiscPattern;
   palette: [string, string, string];
   coverImage?: string;
+  isRemote?: boolean;
 }
 
 interface TrackOverride {
@@ -52,7 +54,7 @@ const KNOWN_TRACKS: Record<string, TrackOverride> = {
   },
 };
 
-const FALLBACK_PATTERNS: DiscPattern[] = [
+export const AVAILABLE_PATTERNS: DiscPattern[] = [
   'horizon',
   'eclipse',
   'rings',
@@ -62,17 +64,18 @@ const FALLBACK_PATTERNS: DiscPattern[] = [
   'stripes',
 ];
 
-const FALLBACK_PALETTES: [string, string, string][] = [
-  ['#bae6fd', '#0369a1', '#f8fafc'],
-  ['#e2e8f0', '#1e293b', '#38bdf8'],
-  ['#fce7f3', '#831843', '#7dd3fc'],
-  ['#dbeafe', '#1d4ed8', '#e0f2fe'],
-  ['#0f172a', '#1e293b', '#7dd3fc'],
+export const AVAILABLE_PALETTES: [string, string, string][] = [
+  ['#bae6fd', '#0284c7', '#f8fafc'], // Sky Blue
+  ['#fbcfe8', '#db2777', '#bae6fd'], // Rose / Sunset
+  ['#fed7aa', '#ea580c', '#fef08a'], // Amber / Sun
+  ['#bbf7d0', '#16a34a', '#e0f2fe'], // Emerald / Fresh
+  ['#e9d5ff', '#9333ea', '#7dd3fc'], // Violet / Dream
+  ['#e2e8f0', '#1e293b', '#38bdf8'], // Slate / Navy
 ];
 
 const LOWERCASE_WORDS = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'y', 'en', 'con', 'a']);
 
-function formatFilenameToTitle(filename: string): string {
+export function formatFilenameToTitle(filename: string): string {
   const withoutExt = filename.replace(/\.[^.]+$/, '');
   const clean = withoutExt.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
   if (!clean) return 'Pista sin título';
@@ -88,10 +91,9 @@ function formatFilenameToTitle(filename: string): string {
 }
 
 /**
- * Automatically builds the playlist from all audio files inside `public/music/`.
- * Dropping a new `.mp3` into `public/music/` adds it cleanly to the carousel.
+ * Automatically builds the base playlist from all audio files inside `public/music/`.
  */
-export const PLAYLIST: PlaylistTrack[] = musicFiles
+export const BASE_PLAYLIST: PlaylistTrack[] = musicFiles
   .map((filename, index) => {
     const key = filename.toLowerCase();
     const override = KNOWN_TRACKS[key];
@@ -103,11 +105,42 @@ export const PLAYLIST: PlaylistTrack[] = musicFiles
         title: override?.title ?? formatFilenameToTitle(filename),
         subtitle: override?.subtitle ?? 'Playlist del Squad',
         src: `/music/${encodeURIComponent(filename)}`,
-        pattern: override?.pattern ?? FALLBACK_PATTERNS[index % FALLBACK_PATTERNS.length],
-        palette: override?.palette ?? FALLBACK_PALETTES[index % FALLBACK_PALETTES.length],
+        pattern: override?.pattern ?? AVAILABLE_PATTERNS[index % AVAILABLE_PATTERNS.length],
+        palette: override?.palette ?? AVAILABLE_PALETTES[index % AVAILABLE_PALETTES.length],
         coverImage: override?.coverImage,
+        isRemote: false,
       } satisfies PlaylistTrack,
     };
   })
   .sort((a, b) => a.order - b.order)
   .map((entry) => entry.track);
+
+export const PLAYLIST: PlaylistTrack[] = BASE_PLAYLIST;
+
+/**
+ * Converts a Supabase `playlist_tracks` record into a frontend `PlaylistTrack`.
+ */
+export function remoteTrackToPlaylistTrack(
+  remote: RemotePlaylistTrack,
+  indexOffset = 0,
+): PlaylistTrack {
+  const pattern = (AVAILABLE_PATTERNS.includes(remote.pattern as DiscPattern)
+    ? remote.pattern
+    : AVAILABLE_PATTERNS[indexOffset % AVAILABLE_PATTERNS.length]) as DiscPattern;
+
+  const palette: [string, string, string] =
+    Array.isArray(remote.palette) && remote.palette.length === 3
+      ? [remote.palette[0], remote.palette[1], remote.palette[2]]
+      : AVAILABLE_PALETTES[indexOffset % AVAILABLE_PALETTES.length];
+
+  return {
+    id: `remote-${remote.id}`,
+    filename: remote.title,
+    title: remote.title,
+    subtitle: remote.subtitle || 'Aporte del Squad',
+    src: remote.audio_url,
+    pattern,
+    palette,
+    isRemote: true,
+  };
+}

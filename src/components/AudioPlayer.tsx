@@ -10,11 +10,22 @@ import {
   Repeat,
   ChevronLeft,
   ChevronRight,
+  Volume,
+  Volume1,
   Volume2,
   VolumeX,
+  ListMusic,
+  Plus,
+  Music,
 } from 'lucide-react';
 import DiscCascadeCarousel, { type DiscCascadeItem } from './ui/disc-cascade-carousel';
-import { PLAYLIST } from '../data/playlist';
+import {
+  BASE_PLAYLIST,
+  remoteTrackToPlaylistTrack,
+  type PlaylistTrack,
+} from '../data/playlist';
+import { fetchRemoteTracks } from '../lib/supabase';
+import { UploadTrackModal } from './UploadTrackModal';
 
 const formatTime = (seconds: number = 0): string => {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -27,9 +38,17 @@ interface CustomSliderProps {
   value: number;
   onChange: (percentage: number) => void;
   ariaLabel?: string;
+  className?: string;
+  barClassName?: string;
 }
 
-const CustomSlider: React.FC<CustomSliderProps> = ({ value, onChange, ariaLabel }) => {
+const CustomSlider: React.FC<CustomSliderProps> = ({
+  value,
+  onChange,
+  ariaLabel,
+  className = 'h-3',
+  barClassName = 'h-1.5',
+}) => {
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -81,9 +100,11 @@ const CustomSlider: React.FC<CustomSliderProps> = ({ value, onChange, ariaLabel 
         setDragging(false);
       }}
       onPointerCancel={() => setDragging(false)}
-      className="relative w-full h-3 flex items-center cursor-pointer group touch-none"
+      className={`relative w-full flex items-center cursor-pointer group touch-none ${className}`}
     >
-      <div className="relative w-full h-1.5 rounded-full bg-sky-950/10 dark:bg-white/15 overflow-visible">
+      <div
+        className={`relative w-full rounded-full bg-sky-950/10 dark:bg-white/15 overflow-visible ${barClassName}`}
+      >
         <div
           className="absolute top-0 left-0 h-full rounded-full bg-[#0284c7] dark:bg-[#38bdf8] transition-[width] duration-75"
           style={{ width: `${value}%` }}
@@ -99,15 +120,32 @@ const CustomSlider: React.FC<CustomSliderProps> = ({ value, onChange, ariaLabel 
   );
 };
 
-/**
- * Minimalist navbar music player fusing @kedhareswer/disc-cascade-carousel
- * and @chetanverma16/audio-player inside a compact liquid-glass popover.
- */
 export const AudioPlayer: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'disc' | 'list'>('disc');
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+
+  // Dynamic Playlist state merging local + remote Supabase tracks
+  const [tracks, setTracks] = useState<PlaylistTrack[]>(BASE_PLAYLIST);
   const [activeIndex, setActiveIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  // Volume control state (persisted to localStorage)
+  const [volume, setVolume] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('squad_music_volume');
+      if (saved !== null) {
+        const parsed = parseFloat(saved);
+        if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 1) return parsed;
+      }
+    } catch {
+      // fallback
+    }
+    return 0.8;
+  });
   const [isMuted, setIsMuted] = useState(false);
+  const prevVolumeRef = useRef(volume);
+
   const [isShuffle, setIsShuffle] = useState(false);
   const [isRepeat, setIsRepeat] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -118,12 +156,32 @@ export const AudioPlayer: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const shouldPlayOnSwitchRef = useRef(false);
 
-  const totalTracks = PLAYLIST.length;
-  const currentTrack = PLAYLIST[activeIndex] ?? PLAYLIST[0];
+  const totalTracks = tracks.length;
+  const currentTrack = tracks[activeIndex] ?? tracks[0];
+
+  // Fetch Supabase tracks on mount
+  useEffect(() => {
+    let isMounted = true;
+    fetchRemoteTracks().then((remoteRecords) => {
+      if (!isMounted || remoteRecords.length === 0) return;
+      const remoteTracks = remoteRecords.map((rec, i) =>
+        remoteTrackToPlaylistTrack(rec, BASE_PLAYLIST.length + i),
+      );
+      setTracks((prev) => {
+        const existingIds = new Set(prev.map((t) => t.id));
+        const freshRemotes = remoteTracks.filter((t) => !existingIds.has(t.id));
+        if (freshRemotes.length === 0) return prev;
+        return [...prev, ...freshRemotes];
+      });
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const discItems: DiscCascadeItem[] = useMemo(
     () =>
-      PLAYLIST.map((track) => ({
+      tracks.map((track) => ({
         title: track.title,
         src: track.coverImage,
         pattern: track.pattern,
@@ -131,8 +189,15 @@ export const AudioPlayer: React.FC = () => {
         label: track.title,
         labelStyle: 'arc',
       })),
-    [],
+    [tracks],
   );
+
+  // Keep audio volume and muted state in sync with audio element
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = isMuted ? 0 : volume;
+    }
+  }, [volume, isMuted]);
 
   // Sync audio source changes cleanly and auto-play when switching tracks
   useEffect(() => {
@@ -151,24 +216,18 @@ export const AudioPlayer: React.FC = () => {
     }
   }, [currentTrack]);
 
-  // Keep mute state synced
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.muted = isMuted;
-    }
-  }, [isMuted]);
-
-  // Close popover on click outside or Escape key
+  // Close popover on click outside or Escape key (unless upload modal is open)
   useEffect(() => {
     if (!isOpen) return;
 
     const onPointerDown = (e: PointerEvent) => {
+      if (isUploadModalOpen) return;
       if (!containerRef.current?.contains(e.target as Node)) {
         setIsOpen(false);
       }
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsOpen(false);
+      if (e.key === 'Escape' && !isUploadModalOpen) setIsOpen(false);
     };
 
     document.addEventListener('pointerdown', onPointerDown);
@@ -177,7 +236,7 @@ export const AudioPlayer: React.FC = () => {
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [isOpen]);
+  }, [isOpen, isUploadModalOpen]);
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
@@ -262,13 +321,62 @@ export const AudioPlayer: React.FC = () => {
     }
   }, [handleNext, isRepeat]);
 
+  // Volume slider handler
+  const handleVolumeChange = useCallback((percentage: number) => {
+    const normalized = Math.min(Math.max(percentage / 100, 0), 1);
+    setVolume(normalized);
+    if (normalized > 0) {
+      setIsMuted(false);
+      prevVolumeRef.current = normalized;
+    } else {
+      setIsMuted(true);
+    }
+    try {
+      localStorage.setItem('squad_music_volume', String(normalized));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    if (isMuted || volume === 0) {
+      const restored = prevVolumeRef.current > 0 ? prevVolumeRef.current : 0.8;
+      setVolume(restored);
+      setIsMuted(false);
+    } else {
+      prevVolumeRef.current = volume;
+      setIsMuted(true);
+    }
+  }, [isMuted, volume]);
+
+  const handleTrackUploaded = (newTrack: PlaylistTrack) => {
+    setTracks((prev) => [...prev, newTrack]);
+    // Switch to new track immediately and view in 3D disc mode
+    shouldPlayOnSwitchRef.current = true;
+    setActiveIndex(tracks.length);
+    setViewMode('disc');
+  };
+
   if (totalTracks === 0) return null;
 
   const formattedIndex = `${String(activeIndex + 1).padStart(2, '0')} / ${String(totalTracks).padStart(2, '0')}`;
 
+  const renderVolumeIcon = () => {
+    if (isMuted || volume === 0) {
+      return <VolumeX className="w-3.5 h-3.5 text-slate-400" />;
+    }
+    if (volume <= 0.35) {
+      return <Volume className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />;
+    }
+    if (volume <= 0.7) {
+      return <Volume1 className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />;
+    }
+    return <Volume2 className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />;
+  };
+
   return (
     <div ref={containerRef} className="relative flex items-center">
-      {/* Persistent audio element stays mounted so playback continues when popover closes */}
+      {/* Persistent HTMLAudioElement */}
       <audio
         ref={audioRef}
         src={currentTrack.src}
@@ -293,7 +401,7 @@ export const AudioPlayer: React.FC = () => {
         className="hidden"
       />
 
-      {/* Minimalist Navbar Trigger Button (replaces the old single-track music toggle) */}
+      {/* Navbar Trigger Button */}
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
@@ -322,7 +430,7 @@ export const AudioPlayer: React.FC = () => {
         />
       </button>
 
-      {/* Compact Popover combining 3D CD Disc Cascade + Audio Player */}
+      {/* Popover Player */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -335,81 +443,259 @@ export const AudioPlayer: React.FC = () => {
             className="fixed top-[72px] inset-x-4 mx-auto max-w-[352px] sm:inset-x-auto sm:mx-0 sm:max-w-none sm:w-[352px] sm:absolute sm:top-[calc(100%+14px)] sm:right-0 z-50 pointer-events-auto"
           >
             <div className="relative flex flex-col items-center">
-              {/* Soft ambient halo behind discs */}
-              <div
-                aria-hidden="true"
-                className="absolute top-2 inset-x-8 h-28 rounded-full bg-sky-400/20 dark:bg-sky-400/15 blur-2xl pointer-events-none"
-              />
-
-              {/* Top half: miniature @kedhareswer/disc-cascade-carousel */}
-              <div className="relative z-0 w-full rounded-t-3xl overflow-visible -mb-7">
-                <DiscCascadeCarousel
-                  items={discItems}
-                  index={activeIndex}
-                  onIndexChange={(idx) => selectTrack(idx, isPlaying)}
-                  onSelect={togglePlay}
-                  isSpinning={isPlaying}
-                  height="160px"
-                  discSize="clamp(104px, 30vw, 118px)"
-                  spacing={0.78}
-                  rise={0.07}
-                  depth={0.34}
-                  yaw={14}
-                  fan={-10}
-                  tilt={-3}
-                  roll={24}
-                  spin={18}
-                  loop
+              {/* Soft ambient halo behind discs (only in disc mode) */}
+              {viewMode === 'disc' && (
+                <div
+                  aria-hidden="true"
+                  className="absolute top-2 inset-x-8 h-28 rounded-full bg-sky-400/20 dark:bg-sky-400/15 blur-2xl pointer-events-none"
                 />
-              </div>
+              )}
 
-              {/* Bottom half: @chetanverma16/audio-player adapted to frosted glass */}
-              <div className="relative z-10 w-full rounded-3xl bg-white/95 dark:bg-[#091221]/95 backdrop-blur-2xl border border-sky-200/75 dark:border-white/12 p-4 pt-4 shadow-xl shadow-sky-950/15 dark:shadow-black/70">
-                {/* Counter pill + compact prev/next disc steppers */}
-                <div className="flex items-center justify-between mb-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsMuted((m) => !m)}
-                    title={isMuted ? 'Activar volumen' : 'Silenciar'}
-                    aria-label={isMuted ? 'Activar volumen' : 'Silenciar'}
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-sky-50 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                  >
-                    {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-                  </button>
+              {/* 3D CD Carousel View */}
+              {viewMode === 'disc' && (
+                <div className="relative z-0 w-full rounded-t-3xl overflow-visible -mb-7">
+                  <DiscCascadeCarousel
+                    items={discItems}
+                    index={activeIndex}
+                    onIndexChange={(idx) => selectTrack(idx, isPlaying)}
+                    onSelect={togglePlay}
+                    isSpinning={isPlaying}
+                    height="160px"
+                    discSize="clamp(104px, 30vw, 118px)"
+                    spacing={0.78}
+                    rise={0.07}
+                    depth={0.34}
+                    yaw={14}
+                    fan={-10}
+                    tilt={-3}
+                    roll={24}
+                    spin={18}
+                    loop
+                  />
+                </div>
+              )}
 
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-mono tracking-wider bg-sky-50/90 dark:bg-white/10 border border-sky-200/70 dark:border-white/10 text-slate-700 dark:text-slate-200">
-                    {formattedIndex}
-                  </span>
-
-                  <div className="flex items-center gap-1">
+              {/* Main Player Card */}
+              <div className="relative z-10 w-full rounded-3xl bg-white/95 dark:bg-[#091221]/95 backdrop-blur-2xl border border-sky-200/75 dark:border-white/12 p-4 shadow-xl shadow-sky-950/15 dark:shadow-black/70">
+                {/* Header: Volume Control + View Mode Switcher */}
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  {/* Volume Control with Continuous Slider */}
+                  <div className="flex items-center gap-1.5" title={`Volumen: ${Math.round((isMuted ? 0 : volume) * 100)}%`}>
                     <button
                       type="button"
-                      onClick={() => handlePrev(isPlaying)}
-                      aria-label="Disco anterior"
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white bg-white/70 dark:bg-white/5 border border-sky-200/60 dark:border-white/10 hover:bg-sky-50 dark:hover:bg-white/15 transition-colors cursor-pointer"
+                      onClick={toggleMute}
+                      title={isMuted ? 'Activar volumen' : 'Silenciar'}
+                      aria-label={isMuted ? 'Activar volumen' : 'Silenciar'}
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-sky-50 dark:hover:bg-white/10 transition-colors cursor-pointer"
                     >
-                      <ChevronLeft className="w-3.5 h-3.5" />
+                      {renderVolumeIcon()}
+                    </button>
+                    <div className="w-14 sm:w-16">
+                      <CustomSlider
+                        value={isMuted ? 0 : volume * 100}
+                        onChange={handleVolumeChange}
+                        ariaLabel="Control de volumen"
+                        className="h-2.5"
+                        barClassName="h-1"
+                      />
+                    </div>
+                  </div>
+
+                  {/* View Mode Toggle Pill: Disco vs Lista */}
+                  <div className="flex items-center p-0.5 rounded-full bg-sky-950/5 dark:bg-white/[0.06] border border-sky-200/60 dark:border-white/10">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('disc')}
+                      aria-pressed={viewMode === 'disc'}
+                      title="Ver carrusel 3D de discos"
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer ${
+                        viewMode === 'disc'
+                          ? 'bg-white dark:bg-[#132238] text-[#0284c7] dark:text-[#38bdf8] shadow-xs'
+                          : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
+                      }`}
+                    >
+                      <Disc3 className="w-3 h-3" />
+                      <span>Disco</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleNext(isPlaying)}
-                      aria-label="Disco siguiente"
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white bg-white/70 dark:bg-white/5 border border-sky-200/60 dark:border-white/10 hover:bg-sky-50 dark:hover:bg-white/15 transition-colors cursor-pointer"
+                      onClick={() => setViewMode('list')}
+                      aria-pressed={viewMode === 'list'}
+                      title="Ver lista de canciones"
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer ${
+                        viewMode === 'list'
+                          ? 'bg-white dark:bg-[#132238] text-[#0284c7] dark:text-[#38bdf8] shadow-xs'
+                          : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
+                      }`}
                     >
-                      <ChevronRight className="w-3.5 h-3.5" />
+                      <ListMusic className="w-3 h-3" />
+                      <span>Lista</span>
+                      <span className="text-[10px] opacity-75 font-mono">({tracks.length})</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Track Title & Subtitle */}
-                <div className="text-center mb-2.5 px-2">
-                  <h3 className="text-lg text-slate-900 dark:text-white font-semibold leading-tight truncate">
-                    {currentTrack.title}
-                  </h3>
-                  <p className="text-xs text-[#0284c7] dark:text-[#38bdf8] truncate mt-0.5">
-                    {currentTrack.subtitle}
-                  </p>
-                </div>
+                {/* Conditional View: 3D Disc Mode Meta OR Song List View */}
+                {viewMode === 'disc' ? (
+                  <>
+                    {/* Counter pill + compact prev/next disc steppers */}
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-mono tracking-wider bg-sky-50/90 dark:bg-white/10 border border-sky-200/70 dark:border-white/10 text-slate-700 dark:text-slate-200">
+                        {formattedIndex}
+                      </span>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handlePrev(isPlaying)}
+                          aria-label="Disco anterior"
+                          className="w-7 h-7 rounded-full flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white bg-white/70 dark:bg-white/5 border border-sky-200/60 dark:border-white/10 hover:bg-sky-50 dark:hover:bg-white/15 transition-colors cursor-pointer"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleNext(isPlaying)}
+                          aria-label="Disco siguiente"
+                          className="w-7 h-7 rounded-full flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white bg-white/70 dark:bg-white/5 border border-sky-200/60 dark:border-white/10 hover:bg-sky-50 dark:hover:bg-white/15 transition-colors cursor-pointer"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Track Title & Subtitle */}
+                    <div className="text-center mb-2.5 px-2">
+                      <h3 className="text-lg text-slate-900 dark:text-white font-semibold leading-tight truncate">
+                        {currentTrack.title}
+                      </h3>
+                      <p className="text-xs text-[#0284c7] dark:text-[#38bdf8] truncate mt-0.5">
+                        {currentTrack.subtitle}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  /* Dedicated Song List View */
+                  <div className="flex flex-col mb-3">
+                    <div className="flex items-center justify-between mb-2 px-1">
+                      <div className="flex items-center gap-1.5">
+                        <Music className="w-3.5 h-3.5 text-[#0284c7] dark:text-[#38bdf8]" />
+                        <span className="text-xs font-semibold text-slate-800 dark:text-white">
+                          Playlist del Squad
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsUploadModalOpen(true)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-[#0284c7]/10 hover:bg-[#0284c7]/20 dark:bg-[#38bdf8]/15 dark:hover:bg-[#38bdf8]/25 text-[#0284c7] dark:text-[#38bdf8] border border-sky-300/60 dark:border-sky-500/30 transition-all cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Agregar</span>
+                      </button>
+                    </div>
+
+                    {/* Scrollable Song List Container */}
+                    <div className="max-h-[175px] overflow-y-auto pr-1 flex flex-col gap-1.5 scrollbar-thin">
+                      {tracks.map((track, idx) => {
+                        const isActive = idx === activeIndex;
+                        return (
+                          <div
+                            key={track.id}
+                            onClick={() => selectTrack(idx, true)}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`Reproducir ${track.title}`}
+                            className={`group flex items-center justify-between p-2 rounded-2xl transition-all cursor-pointer border ${
+                              isActive
+                                ? 'bg-sky-50/90 dark:bg-sky-950/40 border-sky-300/80 dark:border-sky-500/40 shadow-xs'
+                                : 'bg-slate-50/50 hover:bg-slate-100/70 dark:bg-white/[0.03] dark:hover:bg-white/[0.07] border-slate-200/50 dark:border-white/5'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              {/* Track status / Equalizer icon */}
+                              <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0">
+                                {isActive && isPlaying ? (
+                                  <div className="flex items-end gap-0.5 h-3.5 w-3.5">
+                                    <span className="w-1 bg-[#0284c7] dark:bg-[#38bdf8] rounded-full animate-[bounce_0.6s_ease-in-out_infinite] h-2" />
+                                    <span className="w-1 bg-[#0284c7] dark:bg-[#38bdf8] rounded-full animate-[bounce_0.8s_ease-in-out_infinite_0.15s] h-3.5" />
+                                    <span className="w-1 bg-[#0284c7] dark:bg-[#38bdf8] rounded-full animate-[bounce_0.5s_ease-in-out_infinite_0.3s] h-2.5" />
+                                  </div>
+                                ) : (
+                                  <span
+                                    className={`text-[11px] font-mono ${
+                                      isActive
+                                        ? 'text-[#0284c7] dark:text-[#38bdf8] font-bold'
+                                        : 'text-slate-400 dark:text-slate-500'
+                                    }`}
+                                  >
+                                    {String(idx + 1).padStart(2, '0')}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Disc mini palette preview badge */}
+                              <div
+                                className="w-5 h-5 rounded-full shrink-0 border border-white/20 shadow-2xs"
+                                style={{
+                                  background: `linear-gradient(135deg, ${track.palette[0]} 0%, ${track.palette[1]} 60%, ${track.palette[2]} 100%)`,
+                                }}
+                              />
+
+                              {/* Title & Subtitle */}
+                              <div className="min-w-0 flex-1">
+                                <p
+                                  className={`text-xs font-medium truncate leading-tight ${
+                                    isActive
+                                      ? 'text-slate-900 dark:text-white font-semibold'
+                                      : 'text-slate-700 dark:text-slate-200'
+                                  }`}
+                                >
+                                  {track.title}
+                                </p>
+                                <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                                  {track.subtitle}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Active play status button */}
+                            <div className="shrink-0 pl-2">
+                              {isActive ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    togglePlay();
+                                  }}
+                                  className="w-6 h-6 rounded-full flex items-center justify-center bg-[#0284c7] dark:bg-[#38bdf8] text-white dark:text-slate-950 shadow-xs cursor-pointer"
+                                >
+                                  {isPlaying ? (
+                                    <Pause className="w-3 h-3 fill-current" />
+                                  ) : (
+                                    <Play className="w-3 h-3 fill-current translate-x-[0.5px]" />
+                                  )}
+                                </button>
+                              ) : (
+                                <span className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-slate-800 dark:hover:text-white">
+                                  <Play className="w-3 h-3 fill-current" />
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Current track indicator in list view */}
+                    <div className="mt-2 pt-2 border-t border-slate-200/50 dark:border-white/10 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                      <span className="truncate max-w-[200px]">
+                        Reproduciendo: <strong className="text-slate-800 dark:text-white">{currentTrack.title}</strong>
+                      </span>
+                      <span className="font-mono">{formatTime(currentTime)}</span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Progress Bar + Timestamps */}
                 <div className="flex flex-col gap-0.5 mb-3">
@@ -503,6 +789,13 @@ export const AudioPlayer: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Upload Track Modal for Community Songs (Supabase integration ready) */}
+      <UploadTrackModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        onTrackUploaded={handleTrackUploaded}
+      />
     </div>
   );
 };
