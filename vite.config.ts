@@ -63,4 +63,5 @@ function autoMusicPlaylistPlugin(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss(), autoMusicPlaylistPlugin()],
+  envPrefix: ['VITE_', 'NEXT_PUBLIC_', 'SUPABASE_'],
 });
