@@ -27,7 +27,7 @@ import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 export const CinemaSection: React.FC = () => {
   const [videos, setVideos] = useState<SquadVideo[]>(DEFAULT_VIDEOS);
-  const [activeVideoId, setActiveVideoId] = useState<string>(DEFAULT_VIDEOS[0]?.id ?? '');
+  const [activeVideoId, setActiveVideoId] = useState<string>('');
   const [isPlayingMain, setIsPlayingMain] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<VideoCategory>('Todos');
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -38,26 +38,30 @@ export const CinemaSection: React.FC = () => {
   useEffect(() => {
     let isMounted = true;
     fetchRemoteVideos().then((remoteRecords: RemoteSquadVideo[]) => {
-      if (!isMounted || remoteRecords.length === 0) return;
-      const remoteVideos: SquadVideo[] = remoteRecords.map((r) => ({
-        id: `remote-${r.id}`,
-        title: r.title,
-        author: r.author || 'Squad',
-        originalUrl: r.video_url,
-        embedUrl: r.embed_url,
-        platform: r.platform,
-        thumbnailUrl: r.thumbnail_url || undefined,
-        tag: r.tag || 'Momentos',
-        createdAt: r.created_at,
-        isRemote: true,
-      }));
+      if (!isMounted) return;
+      if (remoteRecords.length === 0) {
+        setVideos([]);
+        return;
+      }
+      const remoteVideos: SquadVideo[] = remoteRecords
+        .filter((r) => r.video_url && r.embed_url)
+        .map((r) => ({
+          id: `remote-${r.id}`,
+          title: r.title,
+          author: r.author || 'Squad',
+          originalUrl: r.video_url,
+          embedUrl: r.embed_url,
+          platform: r.platform,
+          thumbnailUrl: r.thumbnail_url || undefined,
+          tag: r.tag || 'Momentos',
+          createdAt: r.created_at,
+          isRemote: true,
+        }));
 
-      setVideos((prev) => {
-        const existingIds = new Set(prev.map((v) => v.id));
-        const fresh = remoteVideos.filter((v) => !existingIds.has(v.id));
-        if (fresh.length === 0) return prev;
-        return [...fresh, ...prev]; // newer community videos first
-      });
+      setVideos(remoteVideos);
+      setActiveVideoId((prev) =>
+        prev && remoteVideos.some((v) => v.id === prev) ? prev : (remoteVideos[0]?.id ?? '')
+      );
     });
 
     return () => {
@@ -98,7 +102,7 @@ export const CinemaSection: React.FC = () => {
   }, [videos, selectedCategory]);
 
   const activeVideo = useMemo(() => {
-    return videos.find((v) => v.id === activeVideoId) ?? videos[0] ?? DEFAULT_VIDEOS[0];
+    return videos.find((v) => v.id === activeVideoId) ?? videos[0] ?? null;
   }, [videos, activeVideoId]);
 
   const safeEmbedUrl = useMemo(() => {
@@ -176,8 +180,8 @@ export const CinemaSection: React.FC = () => {
           </button>
         </div>
 
-        {/* Main Cinema Theater Player */}
-        {activeVideo && (
+        {/* Main Cinema Theater Player or Empty State */}
+        {activeVideo ? (
           <div className="relative rounded-3xl overflow-hidden bg-slate-950/90 dark:bg-[#070e1b] border border-sky-200/70 dark:border-white/12 shadow-2xl shadow-sky-950/15 dark:shadow-black/70 mb-10">
             {/* Screen 16:9 container */}
             <div className="relative w-full aspect-video bg-black/80 flex items-center justify-center">
@@ -286,6 +290,26 @@ export const CinemaSection: React.FC = () => {
                 </a>
               </div>
             </div>
+          </div>
+        ) : (
+          <div className="relative rounded-3xl overflow-hidden bg-white/70 dark:bg-[#070e1b]/80 border border-dashed border-sky-300/60 dark:border-white/10 p-8 sm:p-14 mb-10 text-center flex flex-col items-center justify-center shadow-lg shadow-sky-950/5">
+            <div className="w-16 h-16 rounded-2xl bg-sky-50 dark:bg-sky-950/60 border border-sky-200/80 dark:border-sky-500/30 flex items-center justify-center text-[#0284c7] dark:text-[#38bdf8] mb-4">
+              <Film className="w-8 h-8 stroke-1" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+              La Sala de Cine está lista
+            </h3>
+            <p className="text-sm text-slate-600 dark:text-slate-400 max-w-md mb-6 leading-relaxed">
+              Aún no hay clips guardados. Comparte el primer momento divertido o partida en equipo pegando un enlace de YouTube o Google Drive.
+            </p>
+            <button
+              type="button"
+              onClick={() => setIsUploadModalOpen(true)}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-semibold bg-[#0284c7] hover:bg-[#0369a1] dark:bg-[#38bdf8] dark:hover:bg-sky-300 text-white dark:text-slate-950 shadow-md shadow-sky-950/10 dark:shadow-sky-500/10 transition-all cursor-pointer active:scale-95"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Compartir el primer clip</span>
+            </button>
           </div>
         )}
 
