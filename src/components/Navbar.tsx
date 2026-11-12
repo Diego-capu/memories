@@ -47,7 +47,7 @@ export const Navbar: React.FC = () => {
             className="text-[#0284c7] dark:text-[#38bdf8] transition-transform duration-300 group-hover:rotate-12"
           />
           <span className="font-hand normal-case text-base text-slate-900 dark:text-white group-hover:text-[#0284c7] dark:group-hover:text-[#38bdf8] transition-colors font-normal">
-            recuerdos
+            Recuerdos
           </span>
         </a>
 

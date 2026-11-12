@@ -17,6 +17,7 @@ import {
   ListMusic,
   Plus,
   Music,
+  Trash2,
 } from 'lucide-react';
 import DiscCascadeCarousel, { type DiscCascadeItem } from './ui/disc-cascade-carousel';
 import {
@@ -24,8 +25,9 @@ import {
   remoteTrackToPlaylistTrack,
   type PlaylistTrack,
 } from '../data/playlist';
-import { fetchRemoteTracks } from '../lib/supabase';
+import { fetchRemoteTracks, deleteTrackFromSupabase } from '../lib/supabase';
 import { UploadTrackModal } from './UploadTrackModal';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 const formatTime = (seconds: number = 0): string => {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -124,6 +126,8 @@ export const AudioPlayer: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'disc' | 'list'>('disc');
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [trackToDelete, setTrackToDelete] = useState<PlaylistTrack | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   // Dynamic Playlist state merging local + remote Supabase tracks
   const [tracks, setTracks] = useState<PlaylistTrack[]>(BASE_PLAYLIST);
@@ -221,13 +225,13 @@ export const AudioPlayer: React.FC = () => {
     if (!isOpen) return;
 
     const onPointerDown = (e: PointerEvent) => {
-      if (isUploadModalOpen) return;
+      if (isUploadModalOpen || isDeleteModalOpen) return;
       if (!containerRef.current?.contains(e.target as Node)) {
         setIsOpen(false);
       }
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isUploadModalOpen) setIsOpen(false);
+      if (e.key === 'Escape' && !isUploadModalOpen && !isDeleteModalOpen) setIsOpen(false);
     };
 
     document.addEventListener('pointerdown', onPointerDown);
@@ -236,7 +240,7 @@ export const AudioPlayer: React.FC = () => {
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [isOpen, isUploadModalOpen]);
+  }, [isOpen, isUploadModalOpen, isDeleteModalOpen]);
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
@@ -355,6 +359,41 @@ export const AudioPlayer: React.FC = () => {
     shouldPlayOnSwitchRef.current = true;
     setActiveIndex(tracks.length);
     setViewMode('disc');
+  };
+
+  const openDeleteModal = (track: PlaylistTrack) => {
+    setTrackToDelete(track);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDeleteTrack = async () => {
+    if (!trackToDelete) return;
+    const targetId = trackToDelete.id;
+
+    // Delete from Supabase if remote
+    if (trackToDelete.isRemote) {
+      await deleteTrackFromSupabase(targetId, trackToDelete.src);
+    }
+
+    // Remove from local tracks state
+    const targetIdx = tracks.findIndex((t) => t.id === targetId);
+    const nextTracks = tracks.filter((t) => t.id !== targetId);
+    setTracks(nextTracks);
+
+    // If the deleted track was the currently active track
+    if (targetIdx === activeIndex) {
+      if (nextTracks.length > 0) {
+        const nextIdx = activeIndex >= nextTracks.length ? 0 : activeIndex;
+        setActiveIndex(nextIdx);
+        if (isPlaying) {
+          shouldPlayOnSwitchRef.current = true;
+        }
+      } else {
+        setIsPlaying(false);
+      }
+    } else if (targetIdx < activeIndex) {
+      setActiveIndex((prev) => Math.max(0, prev - 1));
+    }
   };
 
   if (totalTracks === 0) return null;
@@ -659,8 +698,21 @@ export const AudioPlayer: React.FC = () => {
                               </div>
                             </div>
 
-                            {/* Active play status button */}
-                            <div className="shrink-0 pl-2">
+                            {/* Action buttons (Delete & Play) */}
+                            <div className="shrink-0 flex items-center gap-1 pl-2">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openDeleteModal(track);
+                                }}
+                                title={`Eliminar "${track.title}"`}
+                                aria-label={`Eliminar "${track.title}"`}
+                                className="w-6 h-6 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 transition-all opacity-70 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+
                               {isActive ? (
                                 <button
                                   type="button"
@@ -677,7 +729,7 @@ export const AudioPlayer: React.FC = () => {
                                   )}
                                 </button>
                               ) : (
-                                <span className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-slate-800 dark:hover:text-white">
+                                <span className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-slate-800 dark:hover:text-white transition-opacity opacity-0 group-hover:opacity-100">
                                   <Play className="w-3 h-3 fill-current" />
                                 </span>
                               )}
@@ -795,6 +847,16 @@ export const AudioPlayer: React.FC = () => {
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
         onTrackUploaded={handleTrackUploaded}
+      />
+
+      {/* PIN-Protected Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={handleConfirmDeleteTrack}
+        title="Eliminar canción de la playlist"
+        itemName={trackToDelete?.title ?? 'Canción'}
+        itemType="canción"
       />
     </div>
   );

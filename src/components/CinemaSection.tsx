@@ -9,6 +9,7 @@ import {
   Video,
   User,
   Tag,
+  Trash2,
 } from 'lucide-react';
 import {
   DEFAULT_VIDEOS,
@@ -16,8 +17,13 @@ import {
   type SquadVideo,
   type VideoCategory,
 } from '../data/videos';
-import { fetchRemoteVideos, type RemoteSquadVideo } from '../lib/supabase';
+import {
+  fetchRemoteVideos,
+  deleteVideoFromSupabase,
+  type RemoteSquadVideo,
+} from '../lib/supabase';
 import { UploadVideoModal } from './UploadVideoModal';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 export const CinemaSection: React.FC = () => {
   const [videos, setVideos] = useState<SquadVideo[]>(DEFAULT_VIDEOS);
@@ -25,6 +31,8 @@ export const CinemaSection: React.FC = () => {
   const [isPlayingMain, setIsPlayingMain] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<VideoCategory>('Todos');
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [videoToDelete, setVideoToDelete] = useState<SquadVideo | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   // Fetch Supabase remote videos on mount
   useEffect(() => {
@@ -80,6 +88,28 @@ export const CinemaSection: React.FC = () => {
     setVideos((prev) => [newVideo, ...prev]);
     setActiveVideoId(newVideo.id);
     setIsPlayingMain(true);
+  };
+
+  const openDeleteModal = (video: SquadVideo) => {
+    setVideoToDelete(video);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDeleteVideo = async () => {
+    if (!videoToDelete) return;
+    const targetId = videoToDelete.id;
+
+    if (videoToDelete.isRemote) {
+      await deleteVideoFromSupabase(targetId);
+    }
+
+    const nextVideos = videos.filter((v) => v.id !== targetId);
+    setVideos(nextVideos);
+
+    if (activeVideoId === targetId) {
+      setActiveVideoId(nextVideos[0]?.id ?? '');
+      setIsPlayingMain(false);
+    }
   };
 
   return (
@@ -204,6 +234,17 @@ export const CinemaSection: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => openDeleteModal(activeVideo)}
+                  title="Eliminar este clip"
+                  aria-label={`Eliminar clip ${activeVideo.title}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Eliminar</span>
+                </button>
+
                 <a
                   href={activeVideo.originalUrl}
                   target="_blank"
@@ -289,6 +330,20 @@ export const CinemaSection: React.FC = () => {
                       </span>
                     </div>
 
+                    {/* Delete Button on Hover */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDeleteModal(video);
+                      }}
+                      title="Eliminar clip"
+                      aria-label={`Eliminar clip ${video.title}`}
+                      className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 hover:bg-red-600 text-white backdrop-blur-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer z-10"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+
                     {/* Play Hover Overlay */}
                     <div
                       className={`absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity ${
@@ -326,6 +381,19 @@ export const CinemaSection: React.FC = () => {
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
         onVideoAdded={handleVideoAdded}
+      />
+
+      {/* Delete Video Modal */}
+      <DeleteConfirmModal
+        isOpen={isDeleteModalOpen}
+        title="Eliminar clip del cine"
+        itemName={videoToDelete?.title ?? 'Clip seleccionado'}
+        itemType="video"
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setVideoToDelete(null);
+        }}
+        onConfirm={handleConfirmDeleteVideo}
       />
     </section>
   );

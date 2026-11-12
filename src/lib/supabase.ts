@@ -214,3 +214,75 @@ export async function addVideoToSupabase({
 
   return data as RemoteSquadVideo;
 }
+
+/**
+ * Deletes a track from `playlist_tracks` and removes its audio file from Supabase Storage.
+ */
+export async function deleteTrackFromSupabase(
+  trackId: string,
+  audioUrl?: string,
+): Promise<boolean> {
+  if (!supabase) return true; // Handled locally if Supabase not configured
+
+  // Strip remote- prefix if present to obtain the exact UUID
+  const cleanId = trackId.replace(/^remote-/, '');
+
+  try {
+    const { error: dbError } = await supabase
+      .from('playlist_tracks')
+      .delete()
+      .eq('id', cleanId);
+
+    if (dbError) {
+      console.warn('Error deleting track from Supabase database:', dbError.message);
+      throw new Error(`Error en base de datos: ${dbError.message}`);
+    }
+
+    // If audio is in Supabase storage bucket 'music', delete the file
+    if (audioUrl && audioUrl.includes('/storage/v1/object/public/music/')) {
+      const match = audioUrl.split('/storage/v1/object/public/music/')[1];
+      if (match) {
+        const decodedPath = decodeURIComponent(match);
+        const { error: storageError } = await supabase.storage
+          .from('music')
+          .remove([decodedPath]);
+
+        if (storageError) {
+          console.warn('Warning deleting storage file:', storageError.message);
+        }
+      }
+    }
+
+    return true;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error desconocido al eliminar canción.';
+    throw new Error(msg);
+  }
+}
+
+/**
+ * Deletes a video record from `squad_videos` in Supabase Postgres.
+ */
+export async function deleteVideoFromSupabase(videoId: string): Promise<boolean> {
+  if (!supabase) return true; // Handled locally if Supabase not configured
+
+  const cleanId = videoId.replace(/^remote-/, '');
+
+  try {
+    const { error } = await supabase
+      .from('squad_videos')
+      .delete()
+      .eq('id', cleanId);
+
+    if (error) {
+      console.warn('Error deleting video from Supabase:', error.message);
+      throw new Error(`Error al eliminar video: ${error.message}`);
+    }
+
+    return true;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error desconocido al eliminar video.';
+    throw new Error(msg);
+  }
+}
+
