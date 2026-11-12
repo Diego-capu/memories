@@ -1,15 +1,131 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, Calendar, Compass, Sparkles, ZoomIn, X } from 'lucide-react';
+import {
+  MapPin,
+  Calendar,
+  Compass,
+  Sparkles,
+  ZoomIn,
+  X,
+  Plus,
+  Pencil,
+  Trash2,
+} from 'lucide-react';
 import { CHAPTERS, type Chapter } from '../data/memories';
+import {
+  fetchRemoteChapters,
+  saveChapterToSupabase,
+  deleteChapterFromSupabase,
+  type RemoteChapter,
+} from '../lib/supabase';
+import { ChapterModal } from './ChapterModal';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 export const Chapters: React.FC = () => {
+  const [chapters, setChapters] = useState<Chapter[]>(() => {
+    try {
+      const cached = localStorage.getItem('squad_local_chapters');
+      if (cached) return JSON.parse(cached);
+    } catch {
+      // fallback
+    }
+    return CHAPTERS;
+  });
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [chapterToEdit, setChapterToEdit] = useState<Chapter | null>(null);
+  const [chapterToDelete, setChapterToDelete] = useState<Chapter | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+  // Sync with Supabase on mount
+  useEffect(() => {
+    let isMounted = true;
+    fetchRemoteChapters().then((remotes: RemoteChapter[]) => {
+      if (!isMounted || remotes.length === 0) return;
+      const mapped: Chapter[] = remotes.map((r) => ({
+        id: r.id,
+        tag: r.tag,
+        location: r.location,
+        date: r.date,
+        title: r.title,
+        story: r.story,
+        quote: r.quote,
+        imageUrl: r.image_url,
+        isRemote: true,
+      }));
+
+      setChapters((prev) => {
+        const remoteMap = new Map(mapped.map((c) => [c.id, c]));
+        const merged = prev.map((c) => remoteMap.get(c.id) || c);
+        mapped.forEach((c) => {
+          if (!prev.some((p) => p.id === c.id)) {
+            merged.push(c);
+          }
+        });
+        try {
+          localStorage.setItem('squad_local_chapters', JSON.stringify(merged));
+        } catch {}
+        return merged;
+      });
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleOpenAdd = () => {
+    setChapterToEdit(null);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (chapter: Chapter, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setChapterToEdit(chapter);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenDelete = (chapter: Chapter, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setChapterToDelete(chapter);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleSaveChapter = async (saved: Chapter, isEdit: boolean) => {
+    await saveChapterToSupabase(saved, isEdit);
+    setChapters((prev) => {
+      const next = isEdit
+        ? prev.map((c) => (c.id === saved.id ? saved : c))
+        : [...prev, saved];
+      try {
+        localStorage.setItem('squad_local_chapters', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    if (selectedChapter?.id === saved.id) {
+      setSelectedChapter(saved);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!chapterToDelete) return;
+    await deleteChapterFromSupabase(chapterToDelete.id);
+    setChapters((prev) => {
+      const next = prev.filter((c) => c.id !== chapterToDelete.id);
+      try {
+        localStorage.setItem('squad_local_chapters', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    if (selectedChapter?.id === chapterToDelete.id) {
+      setSelectedChapter(null);
+    }
+  };
 
   return (
     <section id="capitulos" className="py-24 md:py-32 px-6 max-w-6xl mx-auto">
       {/* Section Header */}
-      <div className="text-center max-w-2xl mx-auto mb-20 md:mb-28">
+      <div className="text-center max-w-2xl mx-auto mb-16 md:mb-20">
         <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/90 dark:bg-white/10 border border-sky-200/80 dark:border-white/10 text-sm text-sky-800 dark:text-sky-300 shadow-xs mb-4">
           <Compass className="w-4 h-4 text-[#0284c7] dark:text-[#38bdf8]" />
           <span>línea de tiempo</span>
@@ -17,14 +133,23 @@ export const Chapters: React.FC = () => {
         <h2 className="text-4xl sm:text-5xl md:text-6xl text-slate-900 dark:text-white tracking-tight mb-4">
           Capítulos que Nos Marcaron
         </h2>
-        <p className="text-slate-600 dark:text-slate-300 text-base sm:text-lg font-light">
-          Cuatro momentos que resumen por qué este grupo de amigos es irrepetible.
+        <p className="text-slate-600 dark:text-slate-300 text-base sm:text-lg font-light mb-6">
+          Momentos que resumen por qué este grupo de amigos es irrepetible.
         </p>
+
+        <button
+          type="button"
+          onClick={handleOpenAdd}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-sky-500/10 hover:bg-sky-500/20 text-[#0284c7] dark:text-[#38bdf8] border border-sky-300/40 dark:border-sky-500/30 font-medium text-sm transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xs cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Agregar nuevo capítulo</span>
+        </button>
       </div>
 
       {/* Alternating rows */}
       <div className="flex flex-col gap-24 md:gap-36">
-        {CHAPTERS.map((chapter, idx) => {
+        {chapters.map((chapter, idx) => {
           const isReverse = idx % 2 !== 0;
 
           return (
@@ -54,16 +179,36 @@ export const Chapters: React.FC = () => {
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
 
-                    {/* Image top badges */}
-                    <div className="absolute top-4 inset-x-4 flex justify-between items-center text-xs">
-                      <span className="px-3 py-1 rounded-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-stone-200/80 dark:border-white/10 text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1.5 shadow-sm">
-                        <MapPin className="w-3 h-3 text-[#0284c7] dark:text-[#38bdf8]" />
-                        {chapter.location}
-                      </span>
-                      <span className="px-3 py-1 rounded-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-stone-200/80 dark:border-white/10 text-slate-700 dark:text-slate-300 text-xs flex items-center gap-1.5 shadow-sm">
-                        <Calendar className="w-3 h-3 text-stone-400 dark:text-slate-400" />
-                        {chapter.date}
-                      </span>
+                    {/* Image top badges & action buttons */}
+                    <div className="absolute top-4 inset-x-4 flex justify-between items-center text-xs z-20">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="px-3 py-1 rounded-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-stone-200/80 dark:border-white/10 text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1.5 shadow-sm">
+                          <MapPin className="w-3 h-3 text-[#0284c7] dark:text-[#38bdf8]" />
+                          {chapter.location}
+                        </span>
+                        <span className="px-3 py-1 rounded-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-stone-200/80 dark:border-white/10 text-slate-700 dark:text-slate-300 text-xs flex items-center gap-1.5 shadow-sm">
+                          <Calendar className="w-3 h-3 text-stone-400 dark:text-slate-400" />
+                          {chapter.date}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => handleOpenEdit(chapter, e)}
+                          title="Editar capítulo"
+                          className="p-1.5 rounded-full bg-white/90 hover:bg-[#0284c7] hover:text-white dark:bg-slate-900/90 dark:hover:bg-[#38bdf8] dark:hover:text-slate-900 text-slate-700 dark:text-slate-300 border border-stone-200/80 dark:border-white/10 backdrop-blur-md transition-colors cursor-pointer shadow-sm"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleOpenDelete(chapter, e)}
+                          title="Eliminar capítulo"
+                          className="p-1.5 rounded-full bg-white/90 hover:bg-red-600 hover:text-white dark:bg-slate-900/90 dark:hover:bg-red-500 dark:hover:text-white text-slate-700 dark:text-slate-300 border border-stone-200/80 dark:border-white/10 backdrop-blur-md transition-colors cursor-pointer shadow-sm"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Hover overlay */}
@@ -135,13 +280,36 @@ export const Chapters: React.FC = () => {
               onClick={(e) => e.stopPropagation()}
               className="relative max-w-4xl w-full rounded-3xl overflow-hidden bg-white dark:bg-[#0b1526] border border-sky-100 dark:border-white/10 shadow-2xl p-5 sm:p-7 cursor-default max-h-[90vh] flex flex-col"
             >
-              <button
-                onClick={() => setSelectedChapter(null)}
-                className="absolute top-5 right-5 z-10 p-2 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer shadow-xs"
-                title="Cerrar"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="absolute top-5 right-5 z-10 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleOpenEdit(selectedChapter);
+                  }}
+                  className="p-2 rounded-full bg-slate-100 hover:bg-[#0284c7] hover:text-white dark:bg-white/10 dark:hover:bg-[#38bdf8] dark:hover:text-slate-900 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer shadow-xs"
+                  title="Editar capítulo"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleOpenDelete(selectedChapter);
+                  }}
+                  className="p-2 rounded-full bg-slate-100 hover:bg-red-600 hover:text-white dark:bg-white/10 dark:hover:bg-red-500 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/10 transition-colors cursor-pointer shadow-xs"
+                  title="Eliminar capítulo"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedChapter(null)}
+                  className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer shadow-xs"
+                  title="Cerrar"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
 
               <div className="overflow-y-auto pr-1 flex-1 flex flex-col gap-5">
                 <div className="rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-900/60 border border-sky-100 dark:border-white/10 flex items-center justify-center p-2 shadow-inner">
@@ -175,6 +343,26 @@ export const Chapters: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Modals */}
+      <ChapterModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSave={handleSaveChapter}
+        chapterToEdit={chapterToEdit}
+      />
+
+      <DeleteConfirmModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setChapterToDelete(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Eliminar Capítulo"
+        itemName={chapterToDelete?.title || 'este capítulo'}
+        itemType="capítulo"
+      />
     </section>
   );
 };

@@ -7,6 +7,7 @@ export interface Chapter {
   story: string;
   quote: string;
   imageUrl: string;
+  isRemote?: boolean;
 }
 
 export interface Pillar {
@@ -25,17 +26,19 @@ export interface Quote {
   context: string;
   imageUrl: string;
   category: string;
+  isRemote?: boolean;
 }
 
 export interface GalleryPhoto {
   id: string;
   title: string;
-  category: 'roblox' | 'chats' | 'gaming';
+  category: 'roblox' | 'chats' | 'gaming' | string;
   location: string;
   date: string;
   imageUrl: string;
   caption: string;
-  aspect: 'square' | 'portrait' | 'landscape';
+  aspect?: 'square' | 'portrait' | 'landscape';
+  isRemote?: boolean;
 }
 
 export const CHAPTERS: Chapter[] = [

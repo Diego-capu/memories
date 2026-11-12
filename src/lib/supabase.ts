@@ -286,3 +286,373 @@ export async function deleteVideoFromSupabase(videoId: string): Promise<boolean>
   }
 }
 
+/* ==========================================================================
+   CAPÍTULOS (Chapters) API
+   ========================================================================== */
+
+export interface RemoteChapter {
+  id: string;
+  tag: string;
+  location: string;
+  date: string;
+  title: string;
+  story: string;
+  quote: string;
+  image_url: string;
+  created_at?: string;
+}
+
+export async function fetchRemoteChapters(): Promise<RemoteChapter[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('squad_chapters')
+      .select('id, tag, location, date, title, story, quote, image_url, created_at')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.warn('Error fetching chapters from Supabase:', error.message);
+      return [];
+    }
+    return (data as RemoteChapter[]) ?? [];
+  } catch (err) {
+    console.warn('Network error fetching chapters:', err);
+    return [];
+  }
+}
+
+export async function saveChapterToSupabase(
+  chapter: {
+    id: string;
+    tag: string;
+    location: string;
+    date: string;
+    title: string;
+    story: string;
+    quote: string;
+    imageUrl: string;
+  },
+  isEdit = false,
+): Promise<RemoteChapter | null> {
+  if (!supabase) return null;
+  const payload = {
+    id: chapter.id,
+    tag: chapter.tag.trim(),
+    location: chapter.location.trim(),
+    date: chapter.date.trim(),
+    title: chapter.title.trim(),
+    story: chapter.story.trim(),
+    quote: chapter.quote.trim(),
+    image_url: chapter.imageUrl.trim(),
+  };
+
+  if (isEdit) {
+    const { data, error } = await supabase
+      .from('squad_chapters')
+      .update(payload)
+      .eq('id', chapter.id)
+      .select()
+      .single();
+
+    if (error) {
+      // If it doesn't exist yet, insert with this id
+      const { data: insertData, error: insertError } = await supabase
+        .from('squad_chapters')
+        .upsert([payload])
+        .select()
+        .single();
+      if (insertError) throw new Error(`Error al actualizar capítulo: ${insertError.message}`);
+      return insertData as RemoteChapter;
+    }
+    return data as RemoteChapter;
+  }
+
+  const { data, error } = await supabase
+    .from('squad_chapters')
+    .insert([payload])
+    .select()
+    .single();
+
+  if (error) throw new Error(`Error al crear capítulo: ${error.message}`);
+  return data as RemoteChapter;
+}
+
+export async function deleteChapterFromSupabase(chapterId: string): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    const { error } = await supabase
+      .from('squad_chapters')
+      .delete()
+      .eq('id', chapterId);
+    if (error) throw new Error(`Error al eliminar capítulo: ${error.message}`);
+    return true;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error al eliminar capítulo.';
+    throw new Error(msg);
+  }
+}
+
+/* ==========================================================================
+   FRASES (Quotes) API
+   ========================================================================== */
+
+export interface RemoteQuote {
+  id: string;
+  title: string;
+  quote: string;
+  author: string;
+  context: string;
+  image_url: string;
+  category: string;
+  created_at?: string;
+}
+
+export async function fetchRemoteQuotes(): Promise<RemoteQuote[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('squad_quotes')
+      .select('id, title, quote, author, context, image_url, category, created_at')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.warn('Error fetching quotes from Supabase:', error.message);
+      return [];
+    }
+    return (data as RemoteQuote[]) ?? [];
+  } catch (err) {
+    console.warn('Network error fetching quotes:', err);
+    return [];
+  }
+}
+
+export async function saveQuoteToSupabase(
+  quoteItem: {
+    id: string;
+    title: string;
+    quote: string;
+    author: string;
+    context: string;
+    imageUrl: string;
+    category: string;
+  },
+  isEdit = false,
+): Promise<RemoteQuote | null> {
+  if (!supabase) return null;
+  const payload = {
+    id: quoteItem.id,
+    title: quoteItem.title.trim(),
+    quote: quoteItem.quote.trim(),
+    author: quoteItem.author.trim(),
+    context: quoteItem.context.trim(),
+    image_url: quoteItem.imageUrl.trim(),
+    category: quoteItem.category.trim(),
+  };
+
+  if (isEdit) {
+    const { data, error } = await supabase
+      .from('squad_quotes')
+      .update(payload)
+      .eq('id', quoteItem.id)
+      .select()
+      .single();
+
+    if (error) {
+      const { data: upsertData, error: upsertError } = await supabase
+        .from('squad_quotes')
+        .upsert([payload])
+        .select()
+        .single();
+      if (upsertError) throw new Error(`Error al actualizar frase: ${upsertError.message}`);
+      return upsertData as RemoteQuote;
+    }
+    return data as RemoteQuote;
+  }
+
+  const { data, error } = await supabase
+    .from('squad_quotes')
+    .insert([payload])
+    .select()
+    .single();
+
+  if (error) throw new Error(`Error al crear frase: ${error.message}`);
+  return data as RemoteQuote;
+}
+
+export async function deleteQuoteFromSupabase(quoteId: string): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    const { error } = await supabase
+      .from('squad_quotes')
+      .delete()
+      .eq('id', quoteId);
+    if (error) throw new Error(`Error al eliminar frase: ${error.message}`);
+    return true;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error al eliminar frase.';
+    throw new Error(msg);
+  }
+}
+
+/* ==========================================================================
+   GALERÍA (Gallery) API
+   ========================================================================== */
+
+export interface RemoteGalleryPhoto {
+  id: string;
+  title: string;
+  category: string;
+  location: string;
+  date: string;
+  image_url: string;
+  caption: string;
+  aspect?: 'square' | 'portrait' | 'landscape';
+  created_at?: string;
+}
+
+export async function fetchRemoteGallery(): Promise<RemoteGalleryPhoto[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('squad_gallery')
+      .select('id, title, category, location, date, image_url, caption, aspect, created_at')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('Error fetching gallery from Supabase:', error.message);
+      return [];
+    }
+    return (data as RemoteGalleryPhoto[]) ?? [];
+  } catch (err) {
+    console.warn('Network error fetching gallery:', err);
+    return [];
+  }
+}
+
+export async function saveGalleryPhotoToSupabase(
+  photo: {
+    id: string;
+    title: string;
+    category: string;
+    location: string;
+    date: string;
+    imageUrl: string;
+    caption: string;
+    aspect?: 'square' | 'portrait' | 'landscape';
+  },
+  isEdit = false,
+): Promise<RemoteGalleryPhoto | null> {
+  if (!supabase) return null;
+  const payload = {
+    id: photo.id,
+    title: photo.title.trim(),
+    category: photo.category.trim(),
+    location: photo.location.trim(),
+    date: photo.date.trim(),
+    image_url: photo.imageUrl.trim(),
+    caption: photo.caption.trim(),
+    aspect: photo.aspect || 'landscape',
+  };
+
+  if (isEdit) {
+    const { data, error } = await supabase
+      .from('squad_gallery')
+      .update(payload)
+      .eq('id', photo.id)
+      .select()
+      .single();
+
+    if (error) {
+      const { data: upsertData, error: upsertError } = await supabase
+        .from('squad_gallery')
+        .upsert([payload])
+        .select()
+        .single();
+      if (upsertError) throw new Error(`Error al actualizar captura: ${upsertError.message}`);
+      return upsertData as RemoteGalleryPhoto;
+    }
+    return data as RemoteGalleryPhoto;
+  }
+
+  const { data, error } = await supabase
+    .from('squad_gallery')
+    .insert([payload])
+    .select()
+    .single();
+
+  if (error) throw new Error(`Error al crear captura: ${error.message}`);
+  return data as RemoteGalleryPhoto;
+}
+
+export async function deleteGalleryPhotoFromSupabase(photoId: string): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    const { error } = await supabase
+      .from('squad_gallery')
+      .delete()
+      .eq('id', photoId);
+    if (error) throw new Error(`Error al eliminar captura: ${error.message}`);
+    return true;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error al eliminar captura.';
+    throw new Error(msg);
+  }
+}
+
+/* ==========================================================================
+   AVATARES (Roles / Apodos) API
+   ========================================================================== */
+
+export async function fetchRemoteAvatarRoles(): Promise<Record<string, string>> {
+  if (!supabase) return {};
+  try {
+    const { data, error } = await supabase
+      .from('squad_avatars')
+      .select('id, role');
+
+    if (error) {
+      console.warn('Error fetching avatar roles from Supabase:', error.message);
+      return {};
+    }
+
+    const mapping: Record<string, string> = {};
+    if (Array.isArray(data)) {
+      data.forEach((row: { id: string; role: string }) => {
+        if (row.id && row.role) {
+          mapping[row.id] = row.role;
+        }
+      });
+    }
+    return mapping;
+  } catch (err) {
+    console.warn('Network error fetching avatar roles:', err);
+    return {};
+  }
+}
+
+export async function updateAvatarRoleInSupabase(
+  avatarId: string,
+  role: string,
+): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    const payload = {
+      id: avatarId,
+      role: role.trim(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from('squad_avatars')
+      .upsert([payload], { onConflict: 'id' });
+
+    if (error) {
+      throw new Error(`Error al actualizar apodo: ${error.message}`);
+    }
+    return true;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error al actualizar apodo.';
+    throw new Error(msg);
+  }
+}
+

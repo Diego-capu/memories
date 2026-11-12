@@ -16,7 +16,7 @@ interface DeleteConfirmModalProps {
   onConfirm: () => Promise<void> | void;
   title: string;
   itemName: string;
-  itemType: 'canción' | 'video';
+  itemType: string;
 }
 
 export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
