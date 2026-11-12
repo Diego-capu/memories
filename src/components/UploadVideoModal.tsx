@@ -10,6 +10,7 @@ import {
   KeyRound,
   ExternalLink,
   Info,
+  Plus,
 } from 'lucide-react';
 import { parseVideoUrl, type ParsedVideoInfo } from '../utils/videoParser';
 import { VIDEO_CATEGORIES, type SquadVideo } from '../data/videos';
@@ -19,17 +20,21 @@ interface UploadVideoModalProps {
   isOpen: boolean;
   onClose: () => void;
   onVideoAdded: (video: SquadVideo) => void;
+  availableCategories?: string[];
 }
 
 export const UploadVideoModal: React.FC<UploadVideoModalProps> = ({
   isOpen,
   onClose,
   onVideoAdded,
+  availableCategories = VIDEO_CATEGORIES.filter((c) => c !== 'Todos'),
 }) => {
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [tag, setTag] = useState<string>('Momentos');
+  const [isCreatingNewCategory, setIsCreatingNewCategory] = useState(false);
+  const [customCategory, setCustomCategory] = useState('');
   const [pin, setPin] = useState(() => {
     try {
       return sessionStorage.getItem('squad_music_pin') || '';
@@ -52,6 +57,8 @@ export const UploadVideoModal: React.FC<UploadVideoModalProps> = ({
     setTitle('');
     setAuthor('');
     setTag('Momentos');
+    setIsCreatingNewCategory(false);
+    setCustomCategory('');
     setErrorMsg(null);
     setSuccessMsg(null);
     setIsSubmitting(false);
@@ -92,6 +99,17 @@ export const UploadVideoModal: React.FC<UploadVideoModalProps> = ({
       const cleanTitle = title.trim();
       const cleanAuthor = author.trim() || 'Squad';
 
+      let finalTag = tag;
+      if (isCreatingNewCategory) {
+        const cleanCustom = customCategory.trim();
+        if (!cleanCustom) {
+          setErrorMsg('Por favor ingresa un nombre para la nueva categoría.');
+          setIsSubmitting(false);
+          return;
+        }
+        finalTag = cleanCustom;
+      }
+
       if (isSupabaseConfigured) {
         const remote = await addVideoToSupabase({
           title: cleanTitle,
@@ -100,7 +118,7 @@ export const UploadVideoModal: React.FC<UploadVideoModalProps> = ({
           platform: parsedInfo.platform,
           embedUrl: parsedInfo.embedUrl,
           thumbnailUrl: parsedInfo.thumbnailUrl,
-          tag,
+          tag: finalTag,
         });
 
         if (remote) {
@@ -134,7 +152,7 @@ export const UploadVideoModal: React.FC<UploadVideoModalProps> = ({
           embedUrl: parsedInfo.embedUrl,
           platform: parsedInfo.platform,
           thumbnailUrl: parsedInfo.thumbnailUrl,
-          tag,
+          tag: finalTag,
           createdAt: new Date().toISOString(),
           isRemote: false,
         };
@@ -304,20 +322,67 @@ export const UploadVideoModal: React.FC<UploadVideoModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Categoría
-                  </label>
-                  <select
-                    value={tag}
-                    onChange={(e) => setTag(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl text-sm bg-white dark:bg-[#0f1a2c] border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0284c7] dark:focus:ring-[#38bdf8] transition-all cursor-pointer"
-                  >
-                    {VIDEO_CATEGORIES.filter((c) => c !== 'Todos').map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
+                      Categoría
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCreatingNewCategory((prev) => !prev);
+                        if (!isCreatingNewCategory) {
+                          setCustomCategory('');
+                        }
+                      }}
+                      className="text-[11px] font-medium text-[#0284c7] hover:text-[#0369a1] dark:text-[#38bdf8] dark:hover:text-sky-300 inline-flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      {isCreatingNewCategory ? (
+                        <span>Elegir existente</span>
+                      ) : (
+                        <>
+                          <Plus className="w-3 h-3" />
+                          <span>+ Nueva categoría</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {isCreatingNewCategory ? (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={customCategory}
+                        onChange={(e) => {
+                          setCustomCategory(e.target.value);
+                          setErrorMsg(null);
+                        }}
+                        placeholder="Ej. Valorant, Vlogs, Viajes..."
+                        autoFocus
+                        maxLength={24}
+                        className="w-full px-3 py-2 rounded-xl text-sm bg-white dark:bg-[#0f1a2c] border border-sky-400 dark:border-sky-500/50 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0284c7] dark:focus:ring-[#38bdf8] transition-all"
+                      />
+                    </div>
+                  ) : (
+                    <select
+                      value={tag}
+                      onChange={(e) => {
+                        if (e.target.value === '__new__') {
+                          setIsCreatingNewCategory(true);
+                          setCustomCategory('');
+                        } else {
+                          setTag(e.target.value);
+                        }
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-sm bg-white dark:bg-[#0f1a2c] border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0284c7] dark:focus:ring-[#38bdf8] transition-all cursor-pointer"
+                    >
+                      {availableCategories.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                      <option value="__new__">+ Crear nueva categoría...</option>
+                    </select>
+                  )}
                 </div>
               </div>
 

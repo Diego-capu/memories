@@ -22,7 +22,7 @@ export const VIDEO_CATEGORIES = [
   'Música',
 ] as const;
 
-export type VideoCategory = (typeof VIDEO_CATEGORIES)[number];
+export type VideoCategory = string;
 
 const RAW_DEFAULT_VIDEOS = [
   {

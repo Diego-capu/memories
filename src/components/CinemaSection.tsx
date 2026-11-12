@@ -65,6 +65,33 @@ export const CinemaSection: React.FC = () => {
     };
   }, []);
 
+  // Derive all available categories dynamically from defaults + video tags
+  const availableCategories = useMemo(() => {
+    const list: string[] = ['Todos'];
+    const seen = new Set<string>(['todos']);
+
+    VIDEO_CATEGORIES.forEach((cat) => {
+      const lower = cat.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        list.push(cat);
+      }
+    });
+
+    videos.forEach((v) => {
+      if (v.tag && v.tag.trim()) {
+        const clean = v.tag.trim();
+        const lower = clean.toLowerCase();
+        if (!seen.has(lower)) {
+          seen.add(lower);
+          list.push(clean);
+        }
+      }
+    });
+
+    return list;
+  }, [videos]);
+
   const filteredVideos = useMemo(() => {
     if (selectedCategory === 'Todos') return videos;
     return videos.filter((v) => v.tag.toLowerCase() === selectedCategory.toLowerCase());
@@ -88,6 +115,9 @@ export const CinemaSection: React.FC = () => {
     setVideos((prev) => [newVideo, ...prev]);
     setActiveVideoId(newVideo.id);
     setIsPlayingMain(true);
+    if (newVideo.tag) {
+      setSelectedCategory(newVideo.tag);
+    }
   };
 
   const openDeleteModal = (video: SquadVideo) => {
@@ -261,8 +291,8 @@ export const CinemaSection: React.FC = () => {
 
         {/* Category Filter Pills */}
         <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-6 scrollbar-none">
-          {VIDEO_CATEGORIES.map((cat) => {
-            const isSelected = selectedCategory === cat;
+          {availableCategories.map((cat) => {
+            const isSelected = selectedCategory.toLowerCase() === cat.toLowerCase();
             return (
               <button
                 key={cat}
@@ -381,6 +411,7 @@ export const CinemaSection: React.FC = () => {
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
         onVideoAdded={handleVideoAdded}
+        availableCategories={availableCategories.filter((c) => c !== 'Todos')}
       />
 
       {/* Delete Video Modal */}
