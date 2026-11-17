@@ -12,6 +12,9 @@ export interface PlaylistTrack {
   palette: [string, string, string];
   coverImage?: string;
   isRemote?: boolean;
+  platform?: 'upload' | 'spotify';
+  spotifyId?: string;
+  spotifyUrl?: string;
 }
 
 interface TrackOverride {
@@ -66,6 +69,7 @@ export const AVAILABLE_PATTERNS: DiscPattern[] = [
 
 export const AVAILABLE_PALETTES: [string, string, string][] = [
   ['#bae6fd', '#0284c7', '#f8fafc'], // Sky Blue
+  ['#1db954', '#121212', '#ffffff'], // Spotify Green
   ['#fbcfe8', '#db2777', '#bae6fd'], // Rose / Sunset
   ['#fed7aa', '#ea580c', '#fef08a'], // Amber / Sun
   ['#bbf7d0', '#16a34a', '#e0f2fe'], // Emerald / Fresh
@@ -117,6 +121,19 @@ export const BASE_PLAYLIST: PlaylistTrack[] = musicFiles
 
 export const PLAYLIST: PlaylistTrack[] = BASE_PLAYLIST;
 
+export function extractSpotifyTrackId(urlOrUri: string): string | null {
+  if (!urlOrUri) return null;
+  const uriMatch = urlOrUri.match(/spotify:track:([a-zA-Z0-9]+)/);
+  if (uriMatch) return uriMatch[1];
+  const urlMatch = urlOrUri.match(/spotify\.com\/(?:intl-[a-z]+\/)?track\/([a-zA-Z0-9]+)/);
+  if (urlMatch) return urlMatch[1];
+  return null;
+}
+
+export function isSpotifyUrl(urlOrUri: string): boolean {
+  return Boolean(extractSpotifyTrackId(urlOrUri));
+}
+
 /**
  * Converts a Supabase `playlist_tracks` record into a frontend `PlaylistTrack`.
  */
@@ -124,23 +141,34 @@ export function remoteTrackToPlaylistTrack(
   remote: RemotePlaylistTrack,
   indexOffset = 0,
 ): PlaylistTrack {
+  const spotifyId = extractSpotifyTrackId(remote.audio_url);
+  const isSpotify = Boolean(spotifyId);
+
   const pattern = (AVAILABLE_PATTERNS.includes(remote.pattern as DiscPattern)
     ? remote.pattern
     : AVAILABLE_PATTERNS[indexOffset % AVAILABLE_PATTERNS.length]) as DiscPattern;
 
+  const defaultPalette = isSpotify
+    ? (['#1db954', '#121212', '#ffffff'] as [string, string, string])
+    : AVAILABLE_PALETTES[indexOffset % AVAILABLE_PALETTES.length];
+
   const palette: [string, string, string] =
     Array.isArray(remote.palette) && remote.palette.length === 3
       ? [remote.palette[0], remote.palette[1], remote.palette[2]]
-      : AVAILABLE_PALETTES[indexOffset % AVAILABLE_PALETTES.length];
+      : defaultPalette;
 
   return {
     id: `remote-${remote.id}`,
     filename: remote.title,
     title: remote.title,
-    subtitle: remote.subtitle || 'Aporte del Squad',
+    subtitle: remote.subtitle || (isSpotify ? 'Spotify • Playlist del Squad' : 'Aporte del Squad'),
     src: remote.audio_url,
     pattern,
     palette,
+    coverImage: isSpotify ? (remote as unknown as { cover_image?: string }).cover_image : undefined,
     isRemote: true,
+    platform: isSpotify ? 'spotify' : 'upload',
+    spotifyId: spotifyId || undefined,
+    spotifyUrl: isSpotify ? remote.audio_url : undefined,
   };
 }

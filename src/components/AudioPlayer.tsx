@@ -18,11 +18,14 @@ import {
   Plus,
   Music,
   Trash2,
+  ExternalLink,
 } from 'lucide-react';
 import DiscCascadeCarousel, { type DiscCascadeItem } from './ui/disc-cascade-carousel';
 import {
   BASE_PLAYLIST,
   remoteTrackToPlaylistTrack,
+  extractSpotifyTrackId,
+  isSpotifyUrl,
   type PlaylistTrack,
 } from '../data/playlist';
 import { fetchRemoteTracks, deleteTrackFromSupabase } from '../lib/supabase';
@@ -35,6 +38,17 @@ const formatTime = (seconds: number = 0): string => {
   const remainingSeconds = Math.floor(seconds % 60);
   return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
 };
+
+const SpotifyIcon: React.FC<{ className?: string }> = ({ className = 'w-3.5 h-3.5' }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    className={className}
+    aria-hidden="true"
+  >
+    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.497 17.307c-.218.358-.684.473-1.042.255-2.859-1.748-6.459-2.143-10.698-1.173-.41.094-.816-.164-.91-.574-.094-.41.164-.816.574-.91 4.636-1.06 8.608-.607 11.821 1.36.358.218.473.684.255 1.042zm1.467-3.262c-.276.448-.864.593-1.312.317-3.272-2.012-8.258-2.595-12.128-1.42-.505.153-1.042-.136-1.196-.641-.153-.505.136-1.042.641-1.196 4.417-1.341 9.907-.687 13.678 1.628.448.276.593.864.317 1.312zm.126-3.41c-3.924-2.33-10.386-2.544-14.135-1.405-.6.183-1.237-.16-1.42-.76-.183-.6.16-1.237.76-1.42 4.312-1.309 11.455-1.06 15.967 1.62.54.32.716 1.02.396 1.56-.32.54-1.02.716-1.56.396z" />
+  </svg>
+);
 
 interface CustomSliderProps {
   value: number;
@@ -163,6 +177,15 @@ export const AudioPlayer: React.FC = () => {
   const totalTracks = tracks.length;
   const currentTrack = tracks[activeIndex] ?? tracks[0];
 
+  const isCurrentTrackSpotify = Boolean(
+    currentTrack?.platform === 'spotify' ||
+    (currentTrack?.src && isSpotifyUrl(currentTrack.src)) ||
+    currentTrack?.spotifyId
+  );
+  const currentSpotifyId =
+    currentTrack?.spotifyId ||
+    (currentTrack?.src ? extractSpotifyTrackId(currentTrack.src) : null);
+
   // Fetch Supabase tracks on mount
   useEffect(() => {
     let isMounted = true;
@@ -212,13 +235,21 @@ export const AudioPlayer: React.FC = () => {
     setCurrentTime(0);
     setDuration(0);
 
+    if (isCurrentTrackSpotify) {
+      if (!audio.paused) {
+        audio.pause();
+      }
+      shouldPlayOnSwitchRef.current = false;
+      return;
+    }
+
     if (shouldPlayOnSwitchRef.current) {
       shouldPlayOnSwitchRef.current = false;
       audio.play().catch((err) => {
         console.warn('Audio playback warning:', err);
       });
     }
-  }, [currentTrack]);
+  }, [currentTrack, isCurrentTrackSpotify]);
 
   // Close popover on click outside or Escape key (unless upload modal is open)
   useEffect(() => {
@@ -243,6 +274,11 @@ export const AudioPlayer: React.FC = () => {
   }, [isOpen, isUploadModalOpen, isDeleteModalOpen]);
 
   const togglePlay = useCallback(() => {
+    if (isCurrentTrackSpotify) {
+      setIsPlaying((prev) => !prev);
+      return;
+    }
+
     const audio = audioRef.current;
     if (!audio || !currentTrack) return;
 
@@ -253,7 +289,7 @@ export const AudioPlayer: React.FC = () => {
         console.warn('Playback error or blocked by autoplay policy:', err);
       });
     }
-  }, [currentTrack, isPlaying]);
+  }, [currentTrack, isPlaying, isCurrentTrackSpotify]);
 
   const selectTrack = useCallback(
     (nextIdx: number, autoPlay: boolean) => {
@@ -418,7 +454,7 @@ export const AudioPlayer: React.FC = () => {
       {/* Persistent HTMLAudioElement */}
       <audio
         ref={audioRef}
-        src={currentTrack.src}
+        src={isCurrentTrackSpotify ? undefined : currentTrack.src}
         preload="metadata"
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
@@ -605,6 +641,14 @@ export const AudioPlayer: React.FC = () => {
 
                     {/* Track Title & Subtitle */}
                     <div className="text-center mb-2.5 px-2">
+                      <div className="flex items-center justify-center gap-1.5 mb-1">
+                        {isCurrentTrackSpotify && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#1db954]/15 text-[#1db954] border border-[#1db954]/30 shadow-2xs">
+                            <SpotifyIcon className="w-3 h-3" />
+                            <span>SPOTIFY</span>
+                          </span>
+                        )}
+                      </div>
                       <h3 className="text-lg text-slate-900 dark:text-white font-semibold leading-tight truncate">
                         {currentTrack.title}
                       </h3>
@@ -612,6 +656,22 @@ export const AudioPlayer: React.FC = () => {
                         {currentTrack.subtitle}
                       </p>
                     </div>
+
+                    {/* Spotify Embed Player Widget (when Spotify track is active) */}
+                    {isCurrentTrackSpotify && currentSpotifyId && (
+                      <div className="my-2 rounded-2xl overflow-hidden border border-[#1db954]/30 shadow-md bg-black">
+                        <iframe
+                          src={`https://open.spotify.com/embed/track/${currentSpotifyId}?utm_source=generator&theme=0`}
+                          width="100%"
+                          height="152"
+                          frameBorder="0"
+                          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                          loading="lazy"
+                          className="w-full block"
+                          title={`Spotify: ${currentTrack.title}`}
+                        />
+                      </div>
+                    )}
                   </>
                 ) : (
                   /* Dedicated Song List View */
@@ -673,25 +733,41 @@ export const AudioPlayer: React.FC = () => {
                                 )}
                               </div>
 
-                              {/* Disc mini palette preview badge */}
-                              <div
-                                className="w-5 h-5 rounded-full shrink-0 border border-white/20 shadow-2xs"
-                                style={{
-                                  background: `linear-gradient(135deg, ${track.palette[0]} 0%, ${track.palette[1]} 60%, ${track.palette[2]} 100%)`,
-                                }}
-                              />
+                              {/* Disc mini palette preview badge or Spotify badge */}
+                              {track.platform === 'spotify' || isSpotifyUrl(track.src) ? (
+                                <div
+                                  className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center bg-[#1db954] text-black shadow-xs"
+                                  title="Canción de Spotify"
+                                >
+                                  <SpotifyIcon className="w-3 h-3 text-black" />
+                                </div>
+                              ) : (
+                                <div
+                                  className="w-5 h-5 rounded-full shrink-0 border border-white/20 shadow-2xs"
+                                  style={{
+                                    background: `linear-gradient(135deg, ${track.palette[0]} 0%, ${track.palette[1]} 60%, ${track.palette[2]} 100%)`,
+                                  }}
+                                />
+                              )}
 
                               {/* Title & Subtitle */}
                               <div className="min-w-0 flex-1">
-                                <p
-                                  className={`text-xs font-medium truncate leading-tight ${
-                                    isActive
-                                      ? 'text-slate-900 dark:text-white font-semibold'
-                                      : 'text-slate-700 dark:text-slate-200'
-                                  }`}
-                                >
-                                  {track.title}
-                                </p>
+                                <div className="flex items-center gap-1.5">
+                                  <p
+                                    className={`text-xs font-medium truncate leading-tight ${
+                                      isActive
+                                        ? 'text-slate-900 dark:text-white font-semibold'
+                                        : 'text-slate-700 dark:text-slate-200'
+                                    }`}
+                                  >
+                                    {track.title}
+                                  </p>
+                                  {(track.platform === 'spotify' || isSpotifyUrl(track.src)) && (
+                                    <span className="shrink-0 px-1 py-0.2 rounded text-[9px] font-bold bg-[#1db954]/15 text-[#1db954] border border-[#1db954]/30">
+                                      SPOTIFY
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
                                   {track.subtitle}
                                 </p>
@@ -749,14 +825,34 @@ export const AudioPlayer: React.FC = () => {
                   </div>
                 )}
 
-                {/* Progress Bar + Timestamps */}
-                <div className="flex flex-col gap-0.5 mb-3">
-                  <CustomSlider value={progress} onChange={handleSeek} />
-                  <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-                    <span>{formatTime(currentTime)}</span>
-                    <span>{formatTime(duration)}</span>
+                {/* Progress Bar + Timestamps (or Spotify status) */}
+                {!isCurrentTrackSpotify ? (
+                  <div className="flex flex-col gap-0.5 mb-3">
+                    <CustomSlider value={progress} onChange={handleSeek} />
+                    <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+                      <span>{formatTime(currentTime)}</span>
+                      <span>{formatTime(duration)}</span>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex items-center justify-between px-1 py-1 mb-2 text-[11px] text-slate-500 dark:text-slate-400 border-t border-slate-200/50 dark:border-white/5 pt-2">
+                    <span className="flex items-center gap-1.5 text-[#1db954] font-medium">
+                      <SpotifyIcon className="w-3.5 h-3.5" />
+                      <span>Audio oficial de Spotify</span>
+                    </span>
+                    {currentTrack.src && (
+                      <a
+                        href={currentTrack.src}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:underline flex items-center gap-1 text-[#0284c7] dark:text-[#38bdf8]"
+                      >
+                        <span>Abrir app</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
+                )}
 
                 {/* Pill Controls Dock (Shuffle, Prev, Play/Pause, Next, Repeat) */}
                 <div className="flex items-center justify-center">

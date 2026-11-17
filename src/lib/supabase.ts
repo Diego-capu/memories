@@ -130,6 +130,49 @@ export async function uploadTrackToSupabase({
   return insertData as RemotePlaylistTrack;
 }
 
+/**
+ * Saves a Spotify track link into `playlist_tracks` in Supabase Postgres.
+ */
+export async function uploadSpotifyTrackToSupabase({
+  spotifyUrl,
+  title,
+  subtitle,
+  pattern = 'horizon',
+  palette = ['#1db954', '#121212', '#ffffff'],
+}: {
+  spotifyUrl: string;
+  title: string;
+  subtitle?: string;
+  pattern?: string;
+  palette?: string[];
+}): Promise<RemotePlaylistTrack | null> {
+  if (!supabase) {
+    throw new Error(
+      'Supabase no está configurado. Por favor define VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY.'
+    );
+  }
+
+  const { data, error } = await supabase
+    .from('playlist_tracks')
+    .insert([
+      {
+        title: title.trim(),
+        subtitle: subtitle?.trim() || 'Spotify • Playlist del Squad',
+        audio_url: spotifyUrl.trim(),
+        pattern,
+        palette,
+      },
+    ])
+    .select('id, title, subtitle, audio_url, pattern, palette, created_at')
+    .single();
+
+  if (error) {
+    throw new Error(`Error guardando canción de Spotify: ${error.message}`);
+  }
+
+  return data as RemotePlaylistTrack;
+}
+
 export interface RemoteSquadVideo {
   id: string;
   title: string;
